@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useHealthData } from '../context/HealthDataContext'
-import { getTodayFormatted } from '../utils/helpers'
+import { createEntryId, getTodayFormatted } from '../utils/helpers'
 
 const MOOD_LABELS = {
   1: 'Very Low',
@@ -24,7 +24,7 @@ function MoodTracker() {
     const now = new Date()
 
     const newEntry = {
-      id: Date.now(),
+      id: createEntryId(),
       mood: selectedMood,
       timestamp: now.toISOString(),
       date: getTodayFormatted(),
@@ -36,7 +36,7 @@ function MoodTracker() {
   }
 
   const latestEntry = moodEntries.length > 0
-    ? [...moodEntries].sort((a, b) => b.id - a.id)[0]
+    ? [...moodEntries].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))[0]
     : null
 
   return (
@@ -48,11 +48,12 @@ function MoodTracker() {
         Select how you&apos;re feeling and then submit. Date and time are recorded automatically.
       </p>
 
-      <div className="flex justify-between mb-6 space-x-2">
+      <div className="flex justify-between mb-6 space-x-2" role="group" aria-label="Choose a mood from 1 to 5">
         {[1, 2, 3, 4, 5].map((mood) => (
           <button
             key={mood}
             onClick={() => handleSelectMood(mood)}
+            aria-pressed={selectedMood === mood}
             className={`flex-1 py-3 rounded-lg font-semibold border transition-colors ${
               selectedMood === mood
                 ? 'bg-indigo-600 text-white border-indigo-600'
@@ -74,6 +75,7 @@ function MoodTracker() {
       <button
         onClick={handleSubmit}
         disabled={!selectedMood}
+        aria-label="Save selected mood"
         className={`w-full mb-6 py-2 px-4 rounded-lg font-medium transition-colors ${
           selectedMood
             ? 'bg-indigo-600 text-white hover:bg-indigo-700'
@@ -102,7 +104,7 @@ function MoodTracker() {
           </p>
         ) : (
           [...moodEntries]
-            .sort((a, b) => b.id - a.id)
+            .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
             .map((entry) => (
               <div
                 key={entry.id}

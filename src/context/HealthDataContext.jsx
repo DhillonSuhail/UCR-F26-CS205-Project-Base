@@ -1,169 +1,246 @@
-import { createContext, useContext, useState, useEffect, useRef } from 'react'
-import { loadData, saveData, saveFileHandleInfo, getFileHandleInfo } from '../utils/storage'
-import { createFile, openFile, writeFile, readFile } from '../utils/fileOperations'
+import { createContext, useContext, useEffect, useState } from 'react'
+import { createFile, openFile, readFile, writeFile } from '../utils/fileOperations'
+import { createEncryptedData, decryptData, encryptWithKey, isEncryptedEnvelope } from '../utils/encryption'
+import { DEFAULT_HEALTH_DATA, normalizeHealthData } from '../utils/healthData'
+import { clearStoredData, loadData, saveData, saveEncryptedData } from '../utils/storage'
 
-const HealthDataContext = createContext()
+const HealthDataContext = createContext(null)
 
 export function HealthDataProvider({ children }) {
-  const [moodEntries, setMoodEntries] = useState([])
-  const [isLoaded, setIsLoaded] = useState(false)
+  const [initialStorage] = useState(loadData)
+  const [data, setData] = useState(() =>
+    normalizeHealthData(initialStorage.data) || DEFAULT_HEALTH_DATA
+  )
   const [fileHandle, setFileHandle] = useState(null)
-  const [fileStatus, setFileStatus] = useState('none') // 'none', 'saving', 'saved', 'error'
-  const fileHandleRef = useRef(null)
+  const [fileStatus, setFileStatus] = useState('none')
+  const [encryptedEnvelope, setEncryptedEnvelope] = useState(initialStorage.envelope)
+  const [encryptionKey, setEncryptionKey] = useState(null)
+  const [encryptionSalt, setEncryptionSalt] = useState(initialStorage.envelope?.salt || null)
+  const [isEncrypted, setIsEncrypted] = useState(Boolean(initialStorage.envelope))
+  const [isLocked, setIsLocked] = useState(Boolean(initialStorage.envelope))
+  const [storageError, setStorageError] = useState(() =>
+    initialStorage.error || (!initialStorage.envelope && initialStorage.data != null &&
+      !normalizeHealthData(initialStorage.data))
+  )
 
-  // Load data on startup
   useEffect(() => {
-    async function initialize() {
-      // Load from localStorage first
-      const loaded = loadData()
-      setMoodEntries(loaded.moodEntries)
-      setIsLoaded(true)
-      
-      // Try to set up file auto-save
-      const handleInfo = getFileHandleInfo()
-      if (handleInfo && 'showOpenFilePicker' in window) {
-        const handle = await openFile()
-        if (handle) {
-          fileHandleRef.current = handle
-          setFileHandle(handle)
-          
-          // Load data from file if it's newer
-          const fileData = await readFile(handle)
-          if (fileData?.moodEntries) {
-            const fileDate = fileData.lastSaved ? new Date(fileData.lastSaved) : null
-            const storageDate = loaded.moodEntries.length > 0 
-              ? new Date(Math.max(...loaded.moodEntries.map(e => e.id))) 
-              : null
-            
-            if (!storageDate || (fileDate && fileDate > storageDate)) {
-              setMoodEntries(fileData.moodEntries)
-              saveData(fileData.moodEntries)
-            }
-          }
-        }
-      } else {
-        // Auto-setup file on first use
-        const handle = await createFile()
-        if (handle) {
-          fileHandleRef.current = handle
-          setFileHandle(handle)
-          saveFileHandleInfo(handle)
-          await writeFile(handle, {
-            moodEntries: loaded.moodEntries,
-            lastSaved: new Date().toISOString()
-          })
-        }
+    if (storageError || isLocked || (isEncrypted && !encryptionKey)) return undefined
+
+    let active = true
+    const persist = async () => {
+      try {
+        const envelope = isEncrypted
+          ? await encryptWithKey(data, encryptionKey, encryptionSalt)
+          : null
+        if (!active) return
+        const saved = isEncrypted ? saveEncryptedData(envelope) : saveData(data)
+        if (saved && envelope) setEncryptedEnvelope(envelope)
+        setStorageError(!saved)
+      } catch (error) {
+        console.error('Error encrypting local data:', error)
+        if (active) setStorageError(true)
       }
     }
-    
-    initialize()
-  }, [])
-
-  // Auto-save to localStorage and file when data changes
-  useEffect(() => {
-    if (isLoaded) {
-      saveData(moodEntries)
-      saveToFile()
+    persist()
+    return () => {
+      active = false
     }
-  }, [moodEntries, isLoaded])
+  }, [data, encryptionKey, encryptionSalt, isEncrypted, isLocked, storageError])
 
-  async function saveToFile() {
-    const handle = fileHandleRef.current
-    if (!handle) return
+  useEffect(() => {
+    if (!fileHandle || isEncrypted) return
 
+    let active = true
     setFileStatus('saving')
-    const success = await writeFile(handle, {
-      moodEntries,
-      lastSaved: new Date().toISOString()
+    writeFile(fileHandle, { ...data, lastSaved: new Date().toISOString() }).then(success => {
+      if (active) setFileStatus(success ? 'saved' : 'error')
     })
-    
-    if (success) {
-      setFileStatus('saved')
-      setTimeout(() => setFileStatus('none'), 2000)
-    } else {
-      setFileStatus('error')
-      setTimeout(() => setFileStatus('none'), 3000)
+    return () => {
+      active = false
     }
+  }, [data, fileHandle, isEncrypted])
+
+  const addEntry = (type, entry) => {
+    setData(current => ({ ...current, [type]: [...current[type], entry] }))
   }
 
-  async function setupFileHandle() {
-    const handle = await createFile()
-    if (handle) {
-      fileHandleRef.current = handle
-      setFileHandle(handle)
-      saveFileHandleInfo(handle)
-      await saveToFile()
-      return true
-    }
-    return false
+  const deleteEntry = (type, id) => {
+    setData(current => ({
+      ...current,
+      [type]: current[type].filter(entry => entry.id !== id),
+    }))
   }
 
-  async function loadFromFile() {
-    const handle = await openFile()
-    if (handle) {
-      fileHandleRef.current = handle
-      setFileHandle(handle)
-      saveFileHandleInfo(handle)
-      
-      const data = await readFile(handle)
-      if (data?.moodEntries) {
-        setMoodEntries(data.moodEntries)
-        saveData(data.moodEntries)
-        return true
-      }
-    }
-    return false
+  const updateEntry = (type, id, updates) => {
+    setData(current => ({
+      ...current,
+      [type]: current[type].map(entry =>
+        entry.id === id ? { ...entry, ...updates } : entry
+      ),
+    }))
   }
 
-  const addMoodEntry = (entry) => {
-    setMoodEntries([...moodEntries, entry])
+  const updateSettings = (settings) => {
+    setData(current => ({
+      ...current,
+      settings: { ...current.settings, ...settings },
+    }))
   }
 
-  const deleteMoodEntry = (id) => {
-    setMoodEntries(moodEntries.filter(entry => entry.id !== id))
-  }
+  const exportData = () => JSON.stringify({
+    ...data,
+    exportedAt: new Date().toISOString(),
+  }, null, 2)
 
-  const setAllData = (moodEntries) => {
-    setMoodEntries(moodEntries)
-  }
-
-  const exportData = () => {
-    const data = {
-      moodEntries,
-      exportedAt: new Date().toISOString(),
-    }
-    return JSON.stringify(data, null, 2)
+  const exportEncryptedData = async (passphrase) => {
+    const result = await createEncryptedData(data, passphrase)
+    return JSON.stringify(result.envelope, null, 2)
   }
 
   const importData = (jsonString) => {
     try {
-      const data = JSON.parse(jsonString)
-      if (data.moodEntries && Array.isArray(data.moodEntries)) {
-        setAllData(data.moodEntries)
-        return true
-      }
-      return false
+      const imported = normalizeHealthData(JSON.parse(jsonString))
+      if (!imported) return false
+      setData(imported)
+      setStorageError(false)
+      return true
     } catch (error) {
       console.error('Error importing data:', error)
       return false
     }
   }
 
+  const importEncryptedData = async (jsonString, passphrase) => {
+    try {
+      const envelope = JSON.parse(jsonString)
+      if (!isEncryptedEnvelope(envelope)) return false
+      const result = await decryptData(envelope, passphrase)
+      const imported = result && normalizeHealthData(result.data)
+      if (!imported) return false
+      setData(imported)
+      setStorageError(false)
+      return true
+    } catch (error) {
+      console.error('Error importing encrypted backup:', error)
+      return false
+    }
+  }
+
+  const unlock = async (passphrase) => {
+    const result = await decryptData(encryptedEnvelope, passphrase)
+    const imported = result && normalizeHealthData(result.data)
+    if (!result || !imported) return false
+    setData(imported)
+    setEncryptionKey(result.key)
+    setEncryptionSalt(result.salt)
+    setIsLocked(false)
+    setStorageError(false)
+    return true
+  }
+
+  const enableEncryption = async (passphrase) => {
+    const result = await createEncryptedData(data, passphrase)
+    if (!saveEncryptedData(result.envelope)) {
+      setStorageError(true)
+      return false
+    }
+    setEncryptedEnvelope(result.envelope)
+    setEncryptionKey(result.key)
+    setEncryptionSalt(result.salt)
+    setIsEncrypted(true)
+    setStorageError(false)
+    return true
+  }
+
+  const disableEncryption = () => {
+    if (!isEncrypted || isLocked || !saveData(data)) {
+      setStorageError(true)
+      return false
+    }
+    setIsEncrypted(false)
+    setEncryptedEnvelope(null)
+    setEncryptionKey(null)
+    setEncryptionSalt(null)
+    setStorageError(false)
+    return true
+  }
+
+  const lock = async () => {
+    if (!isEncrypted || isLocked) return false
+    const envelope = await encryptWithKey(data, encryptionKey, encryptionSalt)
+    if (!saveEncryptedData(envelope)) {
+      setStorageError(true)
+      return false
+    }
+    setEncryptedEnvelope(envelope)
+    setData(DEFAULT_HEALTH_DATA)
+    setEncryptionKey(null)
+    setIsLocked(true)
+    return true
+  }
+
+  const clearLocalData = () => {
+    if (!clearStoredData()) return false
+    setData(DEFAULT_HEALTH_DATA)
+    setFileHandle(null)
+    setFileStatus('none')
+    setEncryptedEnvelope(null)
+    setEncryptionKey(null)
+    setEncryptionSalt(null)
+    setIsEncrypted(false)
+    setIsLocked(false)
+    setStorageError(false)
+    return true
+  }
+
+  const setupFileHandle = async () => {
+    if (isEncrypted) return false
+    const handle = await createFile()
+    if (!handle) return false
+    setFileHandle(handle)
+    return true
+  }
+
+  const loadFromFile = async () => {
+    if (isEncrypted) return false
+    const handle = await openFile()
+    if (!handle) return false
+    const fileData = await readFile(handle)
+    const imported = normalizeHealthData(fileData)
+    if (!imported) return false
+    setFileHandle(handle)
+    setData(imported)
+    return true
+  }
+
+  const value = {
+    ...data,
+    addMoodEntry: entry => addEntry('moodEntries', entry),
+    deleteMoodEntry: id => deleteEntry('moodEntries', id),
+    addEntry,
+    deleteEntry,
+    updateEntry,
+    updateSettings,
+    exportData,
+    exportEncryptedData,
+    importData,
+    importEncryptedData,
+    unlock,
+    enableEncryption,
+    disableEncryption,
+    lock,
+    clearLocalData,
+    isEncrypted,
+    isLocked,
+    setupFileHandle,
+    loadFromFile,
+    fileHandle,
+    fileStatus,
+    storageError,
+  }
+
   return (
-    <HealthDataContext.Provider
-      value={{
-        moodEntries,
-        addMoodEntry,
-        deleteMoodEntry,
-        exportData,
-        importData,
-        setAllData,
-        setupFileHandle,
-        loadFromFile,
-        fileHandle,
-        fileStatus,
-      }}
-    >
+    <HealthDataContext.Provider value={value}>
       {children}
     </HealthDataContext.Provider>
   )

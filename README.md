@@ -6,6 +6,10 @@ For this final project, you will use **AI coding agents** to extend a simple Moo
 
 Your job is to **leverage AI tools to plan, build, and ship new features** on top of this codebase. This project is less about writing every line by hand and more about learning to effectively collaborate with AI to produce quality software quickly.
 
+### Implemented application
+
+This repository now contains a local-first wellness journal. In addition to mood tracking, it supports sleep, water, exercise, meals, medication reminders, and journal entries; date-range insights, goals, a mood calendar, dark mode, import/export, and optional passphrase encryption. Entries stay in the current browser profile. There is no account, cloud database, or device synchronization.
+
 ---
 
 ## Table of Contents
@@ -52,6 +56,12 @@ npm run dev
 
 Open your browser to `http://localhost:5173`.
 
+Run the data validation tests with `npm test`.
+
+#### Run from WSL
+
+Install Node.js and npm inside your WSL distribution, then run `npm install` and `npm run dev -- --host 0.0.0.0` from the project directory. For a Windows-hosted copy at `C:\Users\<you>\...`, the corresponding WSL path is `/mnt/c/Users/<you>/...`. Open `http://localhost:5173` in your Windows browser. For better file-watcher performance, keep the project under the WSL Linux filesystem (for example `~/projects/`) rather than OneDrive or `/mnt/c`.
+
 ### Building for Production
 
 ```bash
@@ -64,14 +74,16 @@ The built files will be in the `dist` directory.
 
 ## Base App Overview
 
-The starter app is a **Mood Tracking** web app with the following features:
+The app is a **local-first wellness journal** with the following features:
 
-- **Mood Logging** - Record mood on a 1-5 scale with automatic timestamps
-- **Daily Graph** - Line chart of mood entries throughout the current day
-- **Weekly Graph** - Bar chart of average daily mood over the last 7 days
-- **History View** - All-time mood entries organized by date
-- **Data Management** - Export/import mood data as JSON files
-- **Local Persistence** - Data saved to browser localStorage (no backend)
+- **Wellness trackers** - Log mood, sleep duration, quality, optional bedtime/wake time, water, exercise, meals, medications, and journal notes
+- **Goals and reminders** - Set personal sleep, water, and exercise goals; opt into browser medication reminders while the app is open
+- **Insights** - View mood trends over 7, 30, 90, or 365 days, current logging streak, calendar heatmap, and same-day mood/sleep or mood/water correlations
+- **History** - Search, filter, and delete entries across trackers
+- **Accessibility and preferences** - Responsive layouts, keyboard-operable controls, onboarding, and light, dark, forest, or sunset themes
+- **Data portability** - Import and export validated JSON backups, optionally share a user-generated aggregate mood summary, and keep legacy mood-only backups supported
+- **Privacy controls** - Keep data in browser storage, optionally encrypt stored data and backups with a passphrase, and clear local data
+- **Local persistence** - Browser localStorage only; no account, cloud database, or multi-device sync
 
 ### Tech Stack
 
@@ -81,7 +93,15 @@ The starter app is a **Mood Tracking** web app with the following features:
 | Build Tool | Vite |
 | Styling | Tailwind CSS |
 | Charts | Recharts |
-| Storage | Browser localStorage |
+| Storage | Browser localStorage; optional Web Crypto encryption |
+
+### Privacy and backups
+
+The app does not upload or synchronize health data. Without encryption, browser storage and plain JSON exports are readable by anyone who can access that browser profile or file. Passphrase encryption is optional and uses the Web Crypto API (PBKDF2/SHA-256 with 600,000 iterations to derive an AES-256-GCM key). The passphrase is never stored; forgotten passphrases cannot be recovered. Encrypted backups can be restored only with their passphrase. Use `localhost` or HTTPS for Web Crypto support, and keep backups private.
+
+Medication reminders are browser notifications only. The app must remain open and the browser must allow notifications; they are not background alarms and should not replace prescribed instructions.
+
+Entries remain on the device until cleared. Browser profile deletion, private browsing, or storage limits may remove them, so export backups regularly.
 
 ---
 
@@ -89,22 +109,27 @@ The starter app is a **Mood Tracking** web app with the following features:
 
 ```
 src/
-├── modules/                      # Feature modules
-│   └── MoodTracker.jsx           # Mood tracking input and display
-├── components/                   # Reusable UI components
-│   ├── DailyGraph.jsx            # Daily analytics chart
-│   ├── WeeklyGraph.jsx           # Weekly analytics chart
-│   ├── HistoryView.jsx           # All-time history view
-│   └── FileManager.jsx           # Data import/export UI
-├── context/                      # State management
-│   └── HealthDataContext.jsx     # Central data store (React Context)
-├── utils/                        # Helper functions
-│   ├── helpers.js                # Date/time utilities
-│   ├── storage.js                # localStorage operations
-│   └── fileOperations.js         # File import/export logic
-├── App.jsx                       # Main app with tab navigation
-├── main.jsx                      # Entry point
-└── index.css                     # Global styles
+├── modules/MoodTracker.jsx       # Mood check-ins
+├── components/
+│   ├── AnalyticsView.jsx         # Trends, streaks, heatmap, correlations, goals
+│   ├── DailyGraph.jsx            # Today's mood chart
+│   ├── FileManager.jsx           # Import/export, encryption, local privacy controls
+│   ├── HistoryView.jsx           # Searchable cross-tracker history
+│   ├── TodayOverview.jsx        # Daily goal progress
+│   ├── WeeklyGraph.jsx           # Seven-day mood chart
+│   └── WellnessTrackers.jsx      # Sleep, water, exercise, meals, medication, journal
+├── context/HealthDataContext.jsx # Local data, persistence, encryption
+├── utils/
+│   ├── encryption.js             # Web Crypto encryption helpers
+│   ├── fileOperations.js         # Optional File System Access API
+│   ├── healthData.js             # Import validation and defaults
+│   ├── helpers.js                # Date and ID utilities
+│   └── storage.js                # Browser storage operations
+├── App.jsx
+├── index.css
+└── main.jsx
+tests/
+└── healthData.test.js            # Import validation and compatibility tests
 ```
 
 ### Data Format
@@ -113,13 +138,27 @@ src/
 {
   "moodEntries": [
     {
-      "id": 1705320000000,
+      "id": "unique-id",
       "mood": 4,
-      "timestamp": "2024-01-15T12:00:00.000Z",
+      "timestamp": "2026-11-15T20:00:00.000Z",
       "time": "12:00 PM",
-      "date": "1/15/2024"
+      "date": "11/15/2026"
     }
-  ]
+  ],
+  "sleepEntries": [
+    { "id": "sleep-id", "date": "2026-11-15", "hours": 8, "quality": 4, "bedtime": "22:30", "wakeTime": "06:30" }
+  ],
+  "waterEntries": [
+    { "id": "water-id", "date": "2026-11-15", "amountMl": 250 }
+  ],
+  "exerciseEntries": [],
+  "mealEntries": [],
+  "medicationEntries": [],
+  "journalEntries": [],
+  "settings": {
+    "theme": "light",
+    "goals": { "waterMl": 2000, "sleepHours": 8, "exerciseMinutes": 30 }
+  }
 }
 ```
 ---

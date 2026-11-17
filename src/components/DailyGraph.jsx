@@ -1,16 +1,16 @@
 import { useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { useHealthData } from '../context/HealthDataContext'
-import { getTodayFormatted } from '../utils/helpers'
+import { formatDateKey, getEntryDateKey, getLocalDateKey } from '../utils/helpers'
 
 function DailyGraph() {
   const { moodEntries } = useHealthData()
 
   const dailyData = useMemo(() => {
-    const todayStr = getTodayFormatted()
+    const todayKey = getLocalDateKey()
 
     const todayMoods = moodEntries
-      .filter(entry => entry.date === todayStr)
+      .filter(entry => getEntryDateKey(entry) === todayKey)
       .map(entry => ({
         time: entry.time,
         mood: entry.mood,
@@ -32,13 +32,12 @@ function DailyGraph() {
     return [...todayMoods].sort((a, b) => parseTime(a.time) - parseTime(b.time))
   }, [moodEntries])
 
-  const todayStr = getTodayFormatted()
   const hasTodayData = dailyData.length > 0
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
       <h3 className="text-xl font-semibold text-gray-800 mb-2">Today&apos;s Mood</h3>
-      <p className="text-sm text-gray-500 mb-4">{todayStr}</p>
+      <p className="text-sm text-gray-500 mb-4">{formatDateKey(getLocalDateKey(), { month: 'long', day: 'numeric', year: 'numeric' })}</p>
       {!hasTodayData && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
           <p className="text-sm text-yellow-700">

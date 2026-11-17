@@ -1,234 +1,224 @@
-import { useState, useRef, useEffect } from 'react'
+import { useRef, useState } from 'react'
 import { useHealthData } from '../context/HealthDataContext'
 
-function FileManager() {
-  const { exportData, importData, setupFileHandle, loadFromFile, fileHandle, fileStatus } = useHealthData()
-  const [importText, setImportText] = useState('')
-  const [importError, setImportError] = useState('')
-  const [importSuccess, setImportSuccess] = useState(false)
-  const fileInputRef = useRef(null)
+function downloadJson(json, filename) {
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
 
-  useEffect(() => {
-    if (fileStatus === 'saved') {
-      setTimeout(() => setImportSuccess(false), 2000)
-    }
-  }, [fileStatus])
+function LocalEncryptionSettings({ isEncrypted, enableEncryption, disableEncryption, lock }) {
+  const [passphrase, setPassphrase] = useState('')
+  const [confirmation, setConfirmation] = useState('')
+  const [message, setMessage] = useState('')
+  const [isError, setIsError] = useState(false)
 
-  const handleExport = () => {
-    const data = exportData()
-    const blob = new Blob([data], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `health-tracking-data-${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
-
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        const content = event.target.result
-        setImportText(content)
-        handleImport(content)
-      }
-      reader.readAsText(file)
+  async function lockData() {
+    try {
+      const success = await lock()
+      setIsError(!success)
+      setMessage(success ? 'Journal locked.' : 'Could not save your encrypted data before locking.')
+    } catch (error) {
+      setIsError(true)
+      setMessage(error.message)
     }
   }
 
-  const handleImport = (jsonString = importText) => {
-    setImportError('')
-    setImportSuccess(false)
-    
-    if (!jsonString.trim()) {
-      setImportError('Please provide JSON data')
+  async function submit(event) {
+    event.preventDefault()
+    if (passphrase.length < 12 || passphrase !== confirmation) {
+      setIsError(true)
+      setMessage(passphrase.length < 12
+        ? 'Use at least 12 characters.'
+        : 'The passphrases do not match.')
       return
     }
-
-    const success = importData(jsonString)
-    if (success) {
-      setImportSuccess(true)
-      setImportText('')
-      setTimeout(() => setImportSuccess(false), 3000)
-    } else {
-      setImportError('Invalid data format. Please check your JSON structure.')
-    }
-  }
-
-  const handleClear = () => {
-    if (window.confirm('Are you sure you want to clear all data? This cannot be undone.')) {
-      importData(JSON.stringify({ moodEntries: [] }))
-      setImportText('')
-      setImportSuccess(true)
-      setTimeout(() => setImportSuccess(false), 3000)
+    try {
+      const success = await enableEncryption(passphrase)
+      setIsError(!success)
+      setMessage(success ? 'Encryption is on. The passphrase is not stored.' : 'The browser could not save encrypted data.')
+      if (success) {
+        setPassphrase('')
+        setConfirmation('')
+      }
+    } catch (error) {
+      setIsError(true)
+      setMessage(error.message)
     }
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6">
-      <h2 className="text-2xl font-semibold text-gray-800 mb-4">
-        Data Management
-      </h2>
-
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-lg font-medium text-gray-700 mb-2">Auto-Save Status</h3>
-          <p className="text-sm text-gray-600 mb-3">
-            Data is automatically saved to a file whenever you make changes.
-          </p>
-          {fileHandle ? (
-            <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-sm text-green-700">
-                <strong>Auto-save enabled:</strong> {fileHandle.name || 'File selected'}
-              </p>
-              {fileStatus === 'saving' && (
-                <p className="text-xs text-green-600 mt-1">Saving...</p>
-              )}
-              {fileStatus === 'saved' && (
-                <p className="text-xs text-green-600 mt-1">Saved successfully!</p>
-              )}
-              {fileStatus === 'error' && (
-                <p className="text-xs text-red-600 mt-1">Error saving to file</p>
-              )}
-            </div>
-          ) : (
-            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-700">
-                File will be set up automatically on first use. Your data is saved to browser storage.
-              </p>
-            </div>
-          )}
-          <div className="flex gap-2">
-            <button
-              onClick={async () => {
-                const success = await setupFileHandle()
-                if (success) {
-                  setImportSuccess(true)
-                  setTimeout(() => setImportSuccess(false), 3000)
-                }
-              }}
-              className="flex-1 bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors font-medium"
-            >
-              {fileHandle ? 'Change File Location' : 'Set Up File Now'}
-            </button>
-            <button
-              onClick={async () => {
-                const success = await loadFromFile()
-                if (success) {
-                  setImportSuccess(true)
-                  setTimeout(() => setImportSuccess(false), 3000)
-                }
-              }}
-              className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-            >
-              Load from File
-            </button>
-          </div>
+    <section className="rounded-xl bg-white p-5 shadow-sm" aria-labelledby="encryption-heading">
+      <h2 id="encryption-heading" className="text-xl font-semibold text-gray-800">Encrypt local data</h2>
+      <p className="mt-1 text-sm text-gray-600">Optional passphrase encryption protects the browser copy and encrypted backups with AES-GCM. The passphrase is never stored. Losing it means the data cannot be recovered.</p>
+      {isEncrypted ? (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <p className="text-sm font-medium text-emerald-700" role="status">At-rest encryption is enabled.</p>
+          <button type="button" className="rounded-lg border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50" onClick={lockData}>Lock now</button>
+          <button type="button" className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50" onClick={() => {
+            if (window.confirm('Turn off encryption and store your data as readable text in this browser?')) {
+              const success = disableEncryption()
+              setIsError(!success)
+              setMessage(success ? 'Encryption is off. Browser storage is now plaintext.' : 'Could not change the stored data.')
+            }
+          }}>Disable encryption</button>
         </div>
-
-        <div className="border-t border-gray-200 pt-4">
-          <h3 className="text-lg font-medium text-gray-700 mb-2">Manual Export</h3>
-          <p className="text-sm text-gray-600 mb-3">
-            Download your data as a JSON file that you can edit directly
-          </p>
-          <button
-            onClick={handleExport}
-            className="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors font-medium"
-          >
-            Export to JSON File
-          </button>
-        </div>
-
-        <div className="border-t border-gray-200 pt-4">
-          <h3 className="text-lg font-medium text-gray-700 mb-2">Import Data</h3>
-          <p className="text-sm text-gray-600 mb-3">
-            Load data from a JSON file or paste JSON directly
-          </p>
-          
-          <div className="mb-3">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileSelect}
-              accept=".json"
-              className="hidden"
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors font-medium mb-2"
-            >
-              Select JSON File
-            </button>
-          </div>
-
-          <div className="mb-3">
-            <label htmlFor="importText" className="block text-sm font-medium text-gray-700 mb-1">
-              Or paste JSON data here:
-            </label>
-            <textarea
-              id="importText"
-              value={importText}
-              onChange={(e) => setImportText(e.target.value)}
-              placeholder='{"moodEntries": [...] }'
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm"
-              rows="8"
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleImport()}
-              className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
-            >
-              Import Data
-            </button>
-            <button
-              onClick={handleClear}
-              className="flex-1 bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors font-medium"
-            >
-              Clear All Data
-            </button>
-          </div>
-
-          {importError && (
-            <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-600">{importError}</p>
-            </div>
-          )}
-
-          {importSuccess && (
-            <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-sm text-green-600">Data imported successfully!</p>
-            </div>
-          )}
-        </div>
-
-        <div className="border-t border-gray-200 pt-4">
-          <h3 className="text-lg font-medium text-gray-700 mb-2">Data Format</h3>
-          <p className="text-xs text-gray-600 mb-2">
-            Your JSON file should follow this structure:
-          </p>
-          <pre className="bg-gray-50 p-3 rounded text-xs overflow-x-auto">
-{`{
-  "moodEntries": [
-    {
-      "id": 1234567890,
-      "mood": 4,
-      "timestamp": "2024-01-15T12:00:00.000Z",
-      "time": "12:00 PM",
-      "date": "1/15/2024"
-    }
-  ]
-}`}
-          </pre>
-        </div>
-      </div>
-    </div>
+      ) : (
+        <form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={submit}>
+          <label className="text-sm font-medium text-gray-700">New passphrase
+            <input className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2" type="password" autoComplete="new-password" minLength="12" maxLength="1024" value={passphrase} onChange={event => setPassphrase(event.target.value)} required />
+          </label>
+          <label className="text-sm font-medium text-gray-700">Confirm passphrase
+            <input className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2" type="password" autoComplete="new-password" minLength="12" maxLength="1024" value={confirmation} onChange={event => setConfirmation(event.target.value)} required />
+          </label>
+          <button type="submit" className="w-fit rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-700">Encrypt this browser&apos;s data</button>
+        </form>
+      )}
+      {message && <p className={`mt-3 text-sm ${isError ? 'text-red-700' : 'text-emerald-700'}`} role={isError ? 'alert' : 'status'}>{message}</p>}
+    </section>
   )
 }
 
-export default FileManager
+export default function FileManager() {
+  const {
+    exportData, exportEncryptedData, importData, importEncryptedData,
+    setupFileHandle, loadFromFile, fileHandle, fileStatus,
+    isEncrypted, enableEncryption, disableEncryption, lock, clearLocalData,
+    moodEntries, sleepEntries, waterEntries, exerciseEntries, mealEntries,
+    medicationEntries, journalEntries,
+  } = useHealthData()
+  const [importText, setImportText] = useState('')
+  const [backupPassphrase, setBackupPassphrase] = useState('')
+  const [message, setMessage] = useState('')
+  const [isError, setIsError] = useState(false)
+  const fileInputRef = useRef(null)
+  const totalEntries = moodEntries.length + sleepEntries.length + waterEntries.length +
+    exerciseEntries.length + mealEntries.length + medicationEntries.length + journalEntries.length
+
+  async function importJson(json) {
+    if (!json.trim()) {
+      setIsError(true)
+      setMessage('Choose a JSON file or paste valid JSON first.')
+      return
+    }
+    if (totalEntries && !window.confirm('Importing replaces all current entries and goals. Continue?')) return
+    const success = importData(json) ||
+      await importEncryptedData(json, backupPassphrase)
+    if (success) {
+      setImportText('')
+      setBackupPassphrase('')
+      setIsError(false)
+      setMessage('Your wellness data was imported.')
+    } else {
+      setIsError(true)
+      setMessage('The file is invalid or contains unsupported data. No changes were made.')
+    }
+  }
+
+  async function handleFileSelect(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+      if (file.size > 10 * 1024 * 1024) {
+        setIsError(true)
+        setMessage('Backup files must be smaller than 10 MB.')
+      } else {
+        setImportText(await file.text())
+        setIsError(false)
+        setMessage('Backup loaded. Select Import backup to restore it.')
+      }
+    } catch {
+      setIsError(true)
+      setMessage('The selected file could not be read.')
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  function clearData() {
+    if (!window.confirm('Permanently clear all trackers, notes, goals, and settings from this browser? Export a backup first if needed.')) return
+    const success = clearLocalData()
+    setMessage(success ? 'All app data has been cleared from this browser.' : 'The browser could not clear stored data.')
+    setIsError(!success)
+  }
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-xl bg-white p-5 shadow-sm" aria-labelledby="privacy-heading">
+        <h2 id="privacy-heading" className="text-2xl font-semibold text-gray-800">Data &amp; privacy</h2>
+        <p className="mt-2 max-w-3xl text-gray-600">Your entries are stored in this browser&apos;s local storage. They are not uploaded or synchronized. Without passphrase encryption, anyone with access to this browser profile may be able to read them, so use a private device and keep exported backups secure.</p>
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          {isEncrypted ? 'Browser data is encrypted while stored. Downloaded plain JSON backups are not encrypted.' : 'Browser storage is not encrypted until you enable passphrase encryption below. This app is not a medical record system; avoid entering information you would not want saved on this device.'}
+        </div>
+        <p className="mt-3 text-sm text-gray-600" aria-live="polite">{totalEntries} entries currently stored.</p>
+      </section>
+
+      <LocalEncryptionSettings isEncrypted={isEncrypted} enableEncryption={enableEncryption} disableEncryption={disableEncryption} lock={lock} />
+
+      <section className="rounded-xl bg-white p-5 shadow-sm" aria-labelledby="backup-heading">
+        <h2 id="backup-heading" className="text-xl font-semibold text-gray-800">Back up or restore</h2>
+        <p className="mt-1 text-sm text-gray-600">Plain JSON is readable by anyone who gets the file. Use an encrypted backup for sensitive information.</p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button type="button" className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500" onClick={() => downloadJson(exportData(), `wellness-journal-${new Date().toISOString().slice(0, 10)}.json`)}>
+            Export plain JSON
+          </button>
+          <button type="button" className="rounded-lg border border-indigo-300 px-4 py-2 font-medium text-indigo-700 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500" onClick={() => fileInputRef.current?.click()}>
+            Choose JSON backup
+          </button>
+          <input ref={fileInputRef} type="file" accept=".json,application/json" className="sr-only" onChange={handleFileSelect} aria-label="Choose a JSON backup file" />
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+          <label className="text-sm font-medium text-gray-700">Encrypted backup passphrase (12+ characters)
+            <input className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2" type="password" autoComplete="new-password" minLength="12" maxLength="1024" value={backupPassphrase} onChange={event => setBackupPassphrase(event.target.value)} />
+          </label>
+          <button type="button" className="self-end rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-700" disabled={backupPassphrase.length < 12} onClick={async () => {
+            try {
+              const backup = await exportEncryptedData(backupPassphrase)
+              downloadJson(backup, `wellness-journal-encrypted-${new Date().toISOString().slice(0, 10)}.json`)
+              setMessage('Encrypted backup downloaded. Keep its passphrase separately.')
+              setIsError(false)
+            } catch (error) {
+              setMessage(error.message)
+              setIsError(true)
+            }
+          }}>Export encrypted backup</button>
+        </div>
+        <label htmlFor="import-data" className="mt-4 block text-sm font-medium text-gray-700">Or paste a JSON backup</label>
+        <textarea id="import-data" className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" rows="8" value={importText} onChange={event => setImportText(event.target.value)} placeholder='{"moodEntries": [], "sleepEntries": [], ...}' />
+        <div className="mt-3 flex flex-wrap gap-3">
+          <button type="button" className="rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-600" onClick={() => importJson(importText)}>Import backup</button>
+          <button type="button" className="rounded-lg border border-red-300 px-4 py-2 font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500" onClick={clearData}>Clear all local data</button>
+        </div>
+        {message && <p className={`mt-3 text-sm ${isError ? 'text-red-700' : 'text-emerald-700'}`} role={isError ? 'alert' : 'status'}>{message}</p>}
+      </section>
+
+      <section className="rounded-xl bg-white p-5 shadow-sm" aria-labelledby="file-sync-heading">
+        <h2 id="file-sync-heading" className="text-xl font-semibold text-gray-800">Optional JSON file auto-save</h2>
+        <p className="mt-1 text-sm text-gray-600">{isEncrypted ? 'File auto-save is disabled while encryption is on to prevent writing plaintext backups.' : 'On supported browsers, choose a local JSON file to keep an additional backup updated while this app is open. The browser will ask you to select the file again after a reload.'}</p>
+        {!isEncrypted && fileHandle && <p className="mt-2 text-sm text-gray-700" role="status">{fileHandle.name}: {fileStatus === 'saving' ? 'saving…' : fileStatus === 'error' ? 'save failed' : 'connected'}</p>}
+        {!isEncrypted && <div className="mt-3 flex flex-wrap gap-3">
+          <button type="button" className="rounded-lg border border-indigo-300 px-4 py-2 font-medium text-indigo-700 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500" onClick={async () => {
+            const success = await setupFileHandle()
+            setIsError(!success)
+            setMessage(success ? 'Auto-save file selected.' : 'File selection was cancelled or is not supported by this browser.')
+          }}>
+            {fileHandle ? 'Choose a different save file' : 'Choose auto-save file'}
+          </button>
+          <button type="button" className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500" onClick={async () => {
+            const success = await loadFromFile()
+            setIsError(!success)
+            setMessage(success ? 'Backup loaded from the selected file.' : 'File was cancelled, invalid, or is not supported.')
+          }}>
+            Load from JSON file
+          </button>
+        </div>}
+      </section>
+    </div>
+  )
+}

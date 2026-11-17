@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { useHealthData } from '../context/HealthDataContext'
+import { formatDateKey, getEntryDateKey, getLocalDateKey } from '../utils/helpers'
 
 function WeeklyGraph() {
   const { moodEntries } = useHealthData()
@@ -12,10 +13,10 @@ function WeeklyGraph() {
     for (let i = 6; i >= 0; i--) {
       const date = new Date(today)
       date.setDate(date.getDate() - i)
-      const dateStr = date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
+      const dateStr = getLocalDateKey(date)
       const dayName = date.toLocaleDateString('en-US', { weekday: 'short' })
 
-      const dayMoods = moodEntries.filter(entry => entry.date === dateStr)
+      const dayMoods = moodEntries.filter(entry => getEntryDateKey(entry) === dateStr)
       const avgMood =
         dayMoods.length === 0
           ? 0
@@ -23,6 +24,7 @@ function WeeklyGraph() {
 
       days.push({
         day: dayName,
+        date: formatDateKey(dateStr),
         averageMood: Number(avgMood.toFixed(2)),
       })
     }

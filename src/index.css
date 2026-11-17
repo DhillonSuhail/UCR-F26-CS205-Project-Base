@@ -10,3 +10,128 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+body {
+  min-width: 320px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+.dark .bg-white {
+  background-color: #1e293b !important;
+}
+
+.dark .bg-gray-50 {
+  background-color: #0f172a !important;
+}
+
+.dark .bg-gray-100 {
+  background-color: #334155 !important;
+}
+
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-gray-700 {
+  color: #f1f5f9 !important;
+}
+
+.dark .text-gray-600,
+.dark .text-gray-500 {
+  color: #cbd5e1 !important;
+}
+
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .border-gray-300 {
+  border-color: #475569 !important;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+html[data-theme='forest'] .app-shell {
+  background-image: linear-gradient(135deg, #ecfdf5, #d1fae5);
+}
+
+html[data-theme='forest'] .bg-indigo-600 {
+  background-color: #15803d !important;
+}
+
+html[data-theme='forest'] .hover\:bg-indigo-700:hover {
+  background-color: #166534 !important;
+}
+
+html[data-theme='forest'] .text-indigo-600,
+html[data-theme='forest'] .text-indigo-700 {
+  color: #166534 !important;
+}
+
+html[data-theme='forest'] .border-indigo-200,
+html[data-theme='forest'] .border-indigo-300 {
+  border-color: #86efac !important;
+}
+
+html[data-theme='forest'] .bg-indigo-50 {
+  background-color: #ecfdf5 !important;
+}
+
+html[data-theme='forest'] .accent-indigo-600 {
+  accent-color: #15803d;
+}
+
+html[data-theme='sunset'] .app-shell {
+  background-image: linear-gradient(135deg, #fff7ed, #ffedd5);
+}
+
+html[data-theme='sunset'] .bg-indigo-600 {
+  background-color: #c2410c !important;
+}
+
+html[data-theme='sunset'] .hover\:bg-indigo-700:hover {
+  background-color: #9a3412 !important;
+}
+
+html[data-theme='sunset'] .text-indigo-600,
+html[data-theme='sunset'] .text-indigo-700 {
+  color: #9a3412 !important;
+}
+
+html[data-theme='sunset'] .border-indigo-200,
+html[data-theme='sunset'] .border-indigo-300 {
+  border-color: #fdba74 !important;
+}
+
+html[data-theme='sunset'] .bg-indigo-50 {
+  background-color: #fff7ed !important;
+}
+
+html[data-theme='sunset'] .accent-indigo-600 {
+  accent-color: #c2410c;
+}
