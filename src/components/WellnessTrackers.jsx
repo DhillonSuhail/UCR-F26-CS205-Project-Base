@@ -14,6 +14,192 @@ function Panel({ title, children }) {
   )
 }
 
+const POMODORO_MODES = {
+  focus: { label: 'Focus', seconds: 25 * 60 },
+  shortBreak: { label: 'Short break', seconds: 5 * 60 },
+  longBreak: { label: 'Long break', seconds: 15 * 60 },
+}
+
+function formatTimer(seconds) {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}
+
+function PomodoroTimer() {
+  const [mode, setMode] = useState('focus')
+  const [remaining, setRemaining] = useState(POMODORO_MODES.focus.seconds)
+  const [endAt, setEndAt] = useState(null)
+  const [message, setMessage] = useState('')
+  const duration = POMODORO_MODES[mode].seconds
+
+  useEffect(() => {
+    if (endAt === null) return undefined
+
+    const updateRemaining = () => {
+      const next = Math.max(0, Math.ceil((endAt - Date.now()) / 1000))
+      setRemaining(next)
+      if (next === 0) {
+        setEndAt(null)
+        setMessage(`${POMODORO_MODES[mode].label} session complete.`)
+      }
+    }
+
+    updateRemaining()
+    const interval = window.setInterval(updateRemaining, 250)
+    return () => window.clearInterval(interval)
+  }, [endAt, mode])
+
+  function changeMode(event) {
+    const nextMode = event.target.value
+    setMode(nextMode)
+    setEndAt(null)
+    setRemaining(POMODORO_MODES[nextMode].seconds)
+    setMessage('')
+  }
+
+  function start() {
+    if (remaining === 0) setRemaining(duration)
+    setMessage('')
+    setEndAt(Date.now() + (remaining || duration) * 1000)
+  }
+
+  function pause() {
+    if (endAt !== null) setRemaining(Math.max(0, Math.ceil((endAt - Date.now()) / 1000)))
+    setEndAt(null)
+    setMessage('Timer paused.')
+  }
+
+  function reset() {
+    setEndAt(null)
+    setRemaining(duration)
+    setMessage('')
+  }
+
+  return (
+    <Panel title="Pomodoro focus timer">
+      <label className="block text-sm font-medium text-gray-700">Session
+        <select className={fieldClass} value={mode} onChange={changeMode}>
+          {Object.entries(POMODORO_MODES).map(([value, option]) => (
+            <option key={value} value={value}>{option.label} · {option.seconds / 60} min</option>
+          ))}
+        </select>
+      </label>
+      <p className="my-5 text-center text-5xl font-semibold tabular-nums text-indigo-700" role="timer" aria-label={`${Math.floor(remaining / 60)} minutes ${remaining % 60} seconds remaining`}>
+        {formatTimer(remaining)}
+      </p>
+      <progress className="mb-4 h-3 w-full accent-indigo-600" value={duration - remaining} max={duration} aria-label="Pomodoro session progress" />
+      <div className="flex flex-wrap justify-center gap-2">
+        {endAt === null
+          ? <button type="button" className={buttonClass} onClick={start}>{remaining === 0 ? 'Start again' : 'Start'}</button>
+          : <button type="button" className={buttonClass} onClick={pause}>Pause</button>}
+        <button type="button" className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50" onClick={reset}>Reset</button>
+      </div>
+      <p className="mt-3 min-h-5 text-center text-sm text-gray-600" role="status">{message}</p>
+    </Panel>
+  )
+}
+
+const BREATHING_PHASES = [
+  { label: 'Breathe in', seconds: 4 },
+  { label: 'Hold', seconds: 4 },
+  { label: 'Breathe out', seconds: 6 },
+]
+const BREATHING_CYCLE_SECONDS = BREATHING_PHASES.reduce((total, phase) => total + phase.seconds, 0)
+
+function BreathingTimer() {
+  const [durationMinutes, setDurationMinutes] = useState(2)
+  const [elapsedMs, setElapsedMs] = useState(0)
+  const [startedAt, setStartedAt] = useState(null)
+  const [running, setRunning] = useState(false)
+  const [message, setMessage] = useState('')
+  const durationMs = durationMinutes * 60 * 1000
+  const isComplete = elapsedMs >= durationMs
+  const elapsedSeconds = Math.floor(elapsedMs / 1000)
+  const cycleSeconds = elapsedSeconds % BREATHING_CYCLE_SECONDS
+  let phaseOffset = 0
+  let phase = BREATHING_PHASES[0]
+  for (const candidate of BREATHING_PHASES) {
+    if (cycleSeconds < phaseOffset + candidate.seconds) {
+      phase = candidate
+      break
+    }
+    phaseOffset += candidate.seconds
+  }
+  const phaseRemaining = isComplete
+    ? 0
+    : Math.max(1, phase.seconds - (cycleSeconds - phaseOffset))
+  const remainingSeconds = Math.max(0, Math.ceil((durationMs - elapsedMs) / 1000))
+
+  useEffect(() => {
+    if (!running || startedAt === null) return undefined
+    const updateElapsed = () => {
+      const next = Math.min(Date.now() - startedAt, durationMs)
+      setElapsedMs(next)
+      if (next >= durationMs) {
+        setRunning(false)
+        setStartedAt(null)
+        setMessage('Breathing session complete.')
+      }
+    }
+    updateElapsed()
+    const interval = window.setInterval(updateElapsed, 200)
+    return () => window.clearInterval(interval)
+  }, [running, startedAt, durationMs])
+
+  function start() {
+    const startingElapsed = isComplete ? 0 : elapsedMs
+    setElapsedMs(startingElapsed)
+    setStartedAt(Date.now() - startingElapsed)
+    setRunning(true)
+    setMessage('')
+  }
+
+  function pause() {
+    if (startedAt !== null) setElapsedMs(Math.min(Date.now() - startedAt, durationMs))
+    setRunning(false)
+    setStartedAt(null)
+    setMessage('Timer paused.')
+  }
+
+  function reset() {
+    setElapsedMs(0)
+    setStartedAt(null)
+    setRunning(false)
+    setMessage('')
+  }
+
+  function changeDuration(event) {
+    setDurationMinutes(Number(event.target.value))
+    setElapsedMs(0)
+    setStartedAt(null)
+    setRunning(false)
+    setMessage('')
+  }
+
+  return (
+    <Panel title="Focused breathing">
+      <p className="text-sm text-gray-600">Follow the gentle 4–4–6 breathing rhythm: inhale, hold, then exhale.</p>
+      <label className="mt-3 block text-sm font-medium text-gray-700">Session length
+        <select className={fieldClass} value={durationMinutes} onChange={changeDuration} disabled={running}>
+          {[1, 2, 3, 5].map(minutes => <option key={minutes} value={minutes}>{minutes} {minutes === 1 ? 'minute' : 'minutes'}</option>)}
+        </select>
+      </label>
+      <div className="my-5 rounded-xl bg-indigo-50 p-5 text-center">
+        <p className="text-sm font-medium text-gray-600" aria-live="polite" aria-atomic="true">{isComplete ? 'Session complete' : phase.label}</p>
+        <p className="mt-1 text-4xl font-semibold tabular-nums text-indigo-700">{isComplete ? 'Done' : `${phaseRemaining}s`}</p>
+        <p className="mt-2 text-sm text-gray-600">{formatTimer(remainingSeconds)} remaining</p>
+      </div>
+      <progress className="mb-4 h-3 w-full accent-indigo-600" value={elapsedMs} max={durationMs} aria-label="Breathing session progress" />
+      <div className="flex flex-wrap justify-center gap-2">
+        {running
+          ? <button type="button" className={buttonClass} onClick={pause}>Pause</button>
+          : <button type="button" className={buttonClass} onClick={start}>{isComplete ? 'Start again' : elapsedMs ? 'Resume' : 'Start breathing'}</button>}
+        <button type="button" className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50" onClick={reset}>Reset</button>
+      </div>
+      <p className="mt-3 min-h-5 text-center text-sm text-gray-600" role="status">{message}</p>
+    </Panel>
+  )
+}
+
 function RecentEntries({ entries, onDelete, renderEntry, limit = 5 }) {
   const recent = [...entries]
     .sort((a, b) => getEntryDateKey(b).localeCompare(getEntryDateKey(a)) ||
@@ -368,6 +554,8 @@ export default function WellnessTrackers() {
     <>
       <MedicationReminderAlerts />
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <PomodoroTimer />
+        <BreathingTimer />
         <SleepTracker />
         <WaterTracker />
         <ExerciseTracker />

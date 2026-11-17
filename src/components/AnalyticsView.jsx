@@ -110,23 +110,6 @@ function GoalSettings() {
   )
 }
 
-function AppearanceSettings() {
-  const { settings, updateSettings } = useHealthData()
-  return (
-    <section className="rounded-xl bg-white p-5 shadow-sm" aria-labelledby="appearance-heading">
-      <h2 id="appearance-heading" className="text-xl font-semibold text-gray-800">Appearance</h2>
-      <label className="mt-3 block max-w-sm text-sm font-medium text-gray-700">Color theme
-        <select className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2" value={settings.theme} onChange={event => updateSettings({ theme: event.target.value })}>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-          <option value="forest">Forest</option>
-          <option value="sunset">Sunset</option>
-        </select>
-      </label>
-    </section>
-  )
-}
-
 export default function AnalyticsView() {
   const { moodEntries, sleepEntries, waterEntries } = useHealthData()
   const [range, setRange] = useState(30)
@@ -314,7 +297,6 @@ export default function AnalyticsView() {
       </section>
 
       <GoalSettings />
-      <AppearanceSettings />
     </div>
   )
 }

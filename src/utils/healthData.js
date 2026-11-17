@@ -14,6 +14,7 @@ export const DEFAULT_HEALTH_DATA = {
   journalEntries: [],
   settings: {
     theme: 'light',
+    customThemes: [],
     onboardingComplete: false,
     notificationsEnabled: false,
     goals: DEFAULT_GOALS,
@@ -117,8 +118,22 @@ export function normalizeHealthData(value) {
       !validGoal(goals.exerciseMinutes, 1440)) {
     return null
   }
-  if (importedSettings.theme !== undefined &&
-      !['light', 'dark', 'forest', 'sunset'].includes(importedSettings.theme)) return null
+  const customThemes = importedSettings.customThemes ?? []
+  if (!Array.isArray(customThemes) || customThemes.length > 20 ||
+      !customThemes.every(theme => theme && typeof theme === 'object' &&
+        typeof theme.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(theme.id) &&
+        typeof theme.name === 'string' && theme.name.trim().length > 0 &&
+        theme.name.length <= 40 && ['light', 'dark'].includes(theme.mode) &&
+        /^#[0-9a-fA-F]{6}$/.test(theme.accentColor) &&
+        /^#[0-9a-fA-F]{6}$/.test(theme.pageColor)) ||
+      new Set(customThemes.map(theme => theme.id)).size !== customThemes.length) {
+    return null
+  }
+  const selectedTheme = importedSettings.theme
+  if (selectedTheme !== undefined &&
+      !['light', 'dark', 'forest', 'sunset'].includes(selectedTheme) &&
+      !(typeof selectedTheme === 'string' && selectedTheme.startsWith('custom:') &&
+        customThemes.some(theme => selectedTheme === `custom:${theme.id}`))) return null
   if (importedSettings.onboardingComplete !== undefined &&
       typeof importedSettings.onboardingComplete !== 'boolean') return null
   if (importedSettings.notificationsEnabled !== undefined &&
@@ -127,6 +142,8 @@ export function normalizeHealthData(value) {
   data.settings = {
     ...DEFAULT_HEALTH_DATA.settings,
     ...importedSettings,
+    theme: ['forest', 'sunset'].includes(selectedTheme) ? 'light' : selectedTheme || 'light',
+    customThemes,
     goals: { ...DEFAULT_GOALS, ...goals },
   }
   return data

@@ -49,7 +49,8 @@ test('rejects invalid calendar dates and out-of-range goals', () => {
   assert.equal(normalizeHealthData({
     sleepEntries: [{ id: 'sleep', date: '2026-03-01', hours: 8, quality: 4, bedtime: '25:00' }],
   }), null)
-  assert.equal(normalizeHealthData({ settings: { theme: 'forest' } }).settings.theme, 'forest')
+  assert.equal(normalizeHealthData({ settings: { theme: 'forest' } }).settings.theme, 'light')
+  assert.equal(normalizeHealthData({ settings: { theme: 'sunset' } }).settings.theme, 'light')
   assert.equal(normalizeHealthData({
     sleepEntries: [{
       id: 'sleep-with-times', date: '2026-03-01', hours: 8, quality: 4,
@@ -57,6 +58,28 @@ test('rejects invalid calendar dates and out-of-range goals', () => {
     }],
   }).sleepEntries[0].wakeTime, '06:30')
   assert.equal(normalizeHealthData({ settings: { theme: 'neon' } }), null)
+})
+
+test('validates and preserves custom appearance themes', () => {
+  const customTheme = {
+    id: 'calm-blue',
+    name: 'Calm Blue',
+    mode: 'dark',
+    accentColor: '#2563eb',
+    pageColor: '#172554',
+  }
+  const normalized = normalizeHealthData({
+    settings: { theme: 'custom:calm-blue', customThemes: [customTheme] },
+  })
+
+  assert.equal(normalized.settings.theme, 'custom:calm-blue')
+  assert.deepEqual(normalized.settings.customThemes, [customTheme])
+  assert.equal(normalizeHealthData({
+    settings: { theme: 'custom:missing', customThemes: [customTheme] },
+  }), null)
+  assert.equal(normalizeHealthData({
+    settings: { customThemes: [{ ...customTheme, pageColor: 'red' }] },
+  }), null)
 })
 
 test('uses the selected tracker date and supports legacy mood date formats', () => {

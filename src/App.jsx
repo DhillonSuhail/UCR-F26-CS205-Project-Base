@@ -85,6 +85,8 @@ function WellnessApp() {
   const { settings, updateSettings, storageError, isEncrypted, isLocked, lock } = useHealthData()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [lockError, setLockError] = useState('')
+  const activeCustomTheme = settings.customThemes.find(theme => `custom:${theme.id}` === settings.theme)
+  const themeMode = activeCustomTheme?.mode || settings.theme
 
   async function lockJournal() {
     try {
@@ -96,10 +98,17 @@ function WellnessApp() {
   }
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', settings.theme === 'dark')
-    document.documentElement.style.colorScheme = settings.theme === 'dark' ? 'dark' : 'light'
-    document.documentElement.dataset.theme = settings.theme
-  }, [settings.theme])
+    document.documentElement.classList.toggle('dark', themeMode === 'dark')
+    document.documentElement.style.colorScheme = themeMode === 'dark' ? 'dark' : 'light'
+    document.documentElement.dataset.theme = activeCustomTheme ? 'custom' : settings.theme
+    if (activeCustomTheme) {
+      document.documentElement.style.setProperty('--custom-primary', activeCustomTheme.accentColor)
+      document.documentElement.style.setProperty('--custom-page', activeCustomTheme.pageColor)
+    } else {
+      document.documentElement.style.removeProperty('--custom-primary')
+      document.documentElement.style.removeProperty('--custom-page')
+    }
+  }, [settings.theme, settings.customThemes, themeMode, activeCustomTheme])
 
   if (isLocked) return <LockedApp />
 
@@ -112,8 +121,8 @@ function WellnessApp() {
             <h1 className="mt-1 text-3xl font-bold text-gray-900 dark:text-white sm:text-4xl">Wellbeing, one day at a time</h1>
             <p className="mt-2 max-w-2xl text-gray-600 dark:text-gray-300">Track how you feel and the habits that matter to you. Your data stays in this browser unless you export it.</p>
           </div>
-          <button type="button" onClick={() => updateSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' })} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700" aria-label={`Switch to ${settings.theme === 'dark' ? 'light' : 'dark'} mode`}>
-            {settings.theme === 'dark' ? '☀ Light mode' : '☾ Dark mode'}
+          <button type="button" onClick={() => updateSettings({ theme: themeMode === 'dark' ? 'light' : 'dark' })} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700" aria-label={`Switch to ${themeMode === 'dark' ? 'light' : 'dark'} mode`}>
+            {themeMode === 'dark' ? '☀ Light mode' : '☾ Dark mode'}
           </button>
           {isEncrypted && <button type="button" onClick={lockJournal} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700">Lock</button>}
         </header>

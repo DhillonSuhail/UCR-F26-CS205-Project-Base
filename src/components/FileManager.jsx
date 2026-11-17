@@ -1,6 +1,112 @@
 import { useRef, useState } from 'react'
 import { useHealthData } from '../context/HealthDataContext'
 
+function AppearanceSettings({ settings, updateSettings }) {
+  const [name, setName] = useState('')
+  const [mode, setMode] = useState('light')
+  const [accentColor, setAccentColor] = useState('#4f46e5')
+  const [pageColor, setPageColor] = useState('#eff6ff')
+  const [message, setMessage] = useState('')
+
+  function createTheme(event) {
+    event.preventDefault()
+    const trimmedName = name.trim()
+    if (!trimmedName) {
+      setMessage('Enter a name for your theme.')
+      return
+    }
+    if (settings.customThemes.length >= 20) {
+      setMessage('You can save up to 20 custom themes. Delete one to make room.')
+      return
+    }
+    const id = window.crypto?.randomUUID
+      ? window.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const theme = { id, name: trimmedName, mode, accentColor, pageColor }
+    updateSettings({
+      customThemes: [...settings.customThemes, theme],
+      theme: `custom:${id}`,
+    })
+    setName('')
+    setMessage(`Theme "${trimmedName}" created and applied.`)
+  }
+
+  function deleteTheme(theme) {
+    updateSettings({
+      customThemes: settings.customThemes.filter(item => item.id !== theme.id),
+      ...(settings.theme === `custom:${theme.id}` ? { theme: 'light' } : {}),
+    })
+    setMessage(`Theme "${theme.name}" deleted.`)
+  }
+
+  return (
+    <section className="rounded-xl bg-white p-5 shadow-sm" aria-labelledby="appearance-heading">
+      <h2 id="appearance-heading" className="text-xl font-semibold text-gray-800">Appearance</h2>
+      <p className="mt-1 text-sm text-gray-600">Choose a preset or create a theme. Custom themes are saved with this browser&apos;s data.</p>
+      <div className="mt-4 flex flex-wrap gap-3">
+        {[
+          { value: 'light', label: 'Light mode', description: 'Bright surfaces and page colors' },
+          { value: 'dark', label: 'Dark mode', description: 'Dark surfaces for low-light use' },
+        ].map(preset => (
+          <button key={preset.value} type="button" aria-pressed={settings.theme === preset.value}
+            className={`rounded-lg border px-4 py-3 text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+              settings.theme === preset.value ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 hover:bg-gray-50'
+            }`}
+            onClick={() => updateSettings({ theme: preset.value })}>
+            <span className="block font-medium text-gray-800">{preset.label}</span>
+            <span className="mt-1 block text-sm text-gray-600">{preset.description}</span>
+          </button>
+        ))}
+      </div>
+
+      <form onSubmit={createTheme} className="mt-5 grid gap-3 rounded-lg border border-gray-200 p-4 sm:grid-cols-2">
+        <h3 className="font-medium text-gray-800 sm:col-span-2">Create a custom theme</h3>
+        <label className="text-sm font-medium text-gray-700">Theme name
+          <input className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2" value={name} onChange={event => setName(event.target.value)} maxLength="40" required />
+        </label>
+        <label className="text-sm font-medium text-gray-700">Base appearance
+          <select className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2" value={mode} onChange={event => setMode(event.target.value)}>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <label className="text-sm font-medium text-gray-700">Accent color
+          <input className="mt-1 block h-10 w-full rounded-lg border border-gray-300 bg-white p-1" type="color" value={accentColor} onChange={event => setAccentColor(event.target.value)} />
+        </label>
+        <label className="text-sm font-medium text-gray-700">Page background color
+          <input className="mt-1 block h-10 w-full rounded-lg border border-gray-300 bg-white p-1" type="color" value={pageColor} onChange={event => setPageColor(event.target.value)} />
+        </label>
+        <button type="submit" className="w-fit rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:col-span-2">
+          Create and apply theme
+        </button>
+      </form>
+
+      {settings.customThemes.length > 0 && (
+        <ul className="mt-4 divide-y divide-gray-100" aria-label="Custom themes">
+          {settings.customThemes.map(theme => (
+            <li key={theme.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="h-8 w-8 shrink-0 rounded-full border border-gray-300" style={{ background: `linear-gradient(135deg, ${theme.pageColor} 50%, ${theme.accentColor} 50%)` }} aria-hidden="true" />
+                <div>
+                  <p className="font-medium text-gray-800">{theme.name}</p>
+                  <p className="text-sm capitalize text-gray-500">{theme.mode} theme</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" className="rounded-lg border border-indigo-300 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50" aria-pressed={settings.theme === `custom:${theme.id}`} onClick={() => updateSettings({ theme: `custom:${theme.id}` })}>
+                  {settings.theme === `custom:${theme.id}` ? 'Applied' : 'Apply'}
+                </button>
+                <button type="button" className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50" onClick={() => deleteTheme(theme)} aria-label={`Delete ${theme.name} theme`}>Delete</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {message && <p className="mt-3 text-sm text-gray-600" role="status">{message}</p>}
+    </section>
+  )
+}
+
 function downloadJson(json, filename) {
   const blob = new Blob([json], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -88,6 +194,7 @@ function LocalEncryptionSettings({ isEncrypted, enableEncryption, disableEncrypt
 export default function FileManager() {
   const {
     exportData, exportEncryptedData, importData, importEncryptedData,
+    settings, updateSettings,
     setupFileHandle, loadFromFile, fileHandle, fileStatus,
     isEncrypted, enableEncryption, disableEncryption, lock, clearLocalData,
     moodEntries, sleepEntries, waterEntries, exerciseEntries, mealEntries,
@@ -158,6 +265,8 @@ export default function FileManager() {
         </div>
         <p className="mt-3 text-sm text-gray-600" aria-live="polite">{totalEntries} entries currently stored.</p>
       </section>
+
+      <AppearanceSettings settings={settings} updateSettings={updateSettings} />
 
       <LocalEncryptionSettings isEncrypted={isEncrypted} enableEncryption={enableEncryption} disableEncryption={disableEncryption} lock={lock} />
 
